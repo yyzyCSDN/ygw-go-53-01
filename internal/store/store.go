@@ -240,7 +240,19 @@ func (s *Store) MergeWrite(key model.EntityKey, patch map[string]model.FeatureVa
 	if entry.Fields == nil {
 		entry.Fields = map[string]model.FeatureValue{}
 	}
+	window := make(map[string]bool, len(overwrite))
+	for _, name := range overwrite {
+		window[name] = true
+	}
+	// Only fields inside the overwrite window are authoritative for this
+	// write: a windowed field absent from the patch is removed so the import
+	// is the source of truth for exactly the fields it carries. Fields outside
+	// the window — including ones added online while the import ran — are left
+	// untouched.
 	for name := range entry.Fields {
+		if !window[name] {
+			continue
+		}
 		if _, present := patch[name]; !present {
 			delete(entry.Fields, name)
 		}

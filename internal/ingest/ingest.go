@@ -27,11 +27,11 @@ type Segment struct {
 
 // Batch is the mutable state of one import operation.
 type Batch struct {
-	ID       string
+	ID        string
 	VersionID string
-	Segments []Segment
-	Started  time.Time
-	Failed   bool
+	Segments  []Segment
+	Started   time.Time
+	Failed    bool
 }
 
 // Importer merges import files into the store in segments.
@@ -82,7 +82,7 @@ func (im *Importer) Import(batchID, tableID string, rows []Row, versionID string
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("ingest: empty import file")
 	}
-	overwrite := schemaFields(im.tables.MustGet(tableID))
+	overwrite := fieldWindow(im.tables.MustGet(tableID), rows)
 	batch := &Batch{ID: batchID, VersionID: versionID, Started: time.Now()}
 	im.batches[batchID] = batch
 	for start := 0; start < len(rows); start += im.windowSize {

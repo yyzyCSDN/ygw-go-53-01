@@ -39,9 +39,12 @@ func (sc *Scanner) Scan(now time.Time) int {
 	return expired
 }
 
-// IsExpired reports whether an entry of the given age is past the TTL.
+// IsExpired reports whether an entry of the given age is past the TTL. An
+// entry whose age equals the TTL is treated as still live: expiry is strict,
+// so a feature written exactly on the expiry boundary survives the scan that
+// observes it and is never mistaken for stale data.
 func (sc *Scanner) IsExpired(age time.Duration) bool {
-	return age >= sc.ttl
+	return age > sc.ttl
 }
 
 // ExpireKey is a direct expiry helper used by the HTTP handler.

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>FeatureStore 特征浏览</title>
+  <style>
+    body { font-family: system-ui, "Microsoft YaHei", sans-serif; margin: 2rem; color: #222; }
+    h1 { font-size: 1.4rem; }
+    section { margin: 1.2rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+    label { display: inline-block; min-width: 7rem; }
+    input, button { padding: 0.35rem 0.6rem; margin: 0.2rem; }
+    table { border-collapse: collapse; margin-top: 0.6rem; }
+    th, td { border: 1px solid #ccc; padding: 0.3rem 0.7rem; text-align: left; }
+    pre { background: #f6f6f6; padding: 0.7rem; border-radius: 6px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>FeatureStore 特征存储服务</h1>
+
+  <section>
+    <h2>健康检查</h2>
+    <button onclick="health()">刷新状态</button>
+    <pre id="health"></pre>
+  </section>
+
+  <section>
+    <h2>特征读取</h2>
+    <label>实体键</label><input id="readKey" placeholder="user_10001">
+    <button onclick="readFeature()">读取</button>
+    <pre id="readResult"></pre>
+  </section>
+
+  <section>
+    <h2>特征写入</h2>
+    <label>实体键</label><input id="writeKey" placeholder="user_10001">
+    <label>字段 JSON</label><input id="writeFields" value="{&quot;age&quot;: 30, &quot;city&quot;: &quot;杭州&quot;}">
+    <button onclick="writeFeature()">写入</button>
+    <pre id="writeResult"></pre>
+  </section>
+
+  <section>
+    <h2>版本管理</h2>
+    <button onclick="listVersions()">版本列表</button>
+    <pre id="versions"></pre>
+  </section>
+
+  <section>
+    <h2>分片扩容</h2>
+    <label>目标分片数</label><input id="shards" value="64">
+    <button onclick="expandShards()">扩容</button>
+    <pre id="expandResult"></pre>
+  </section>
+
+  <section>
+    <h2>一致性校验与 TTL</h2>
+    <button onclick="syncCheck()">一致性校验</button>
+    <button onclick="ttlScan()">TTL 扫描</button>
+    <pre id="opsResult"></pre>
+  </section>
+
+  <script>
+    async function post(path, body) {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {})
+      });
+      return res.json();
+    }
+
+    async function health() {
+      const data = await (await fetch("/api/health")).json();
+      document.getElementById("health").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function readFeature() {
+      const key = document.getElementById("readKey").value;
+      const data = await (await fetch("/api/read?key=" + encodeURIComponent(key))).json();
+      document.getElementById("readResult").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function writeFeature() {
+      const key = document.getElementById("writeKey").value;
+      const fields = JSON.parse(document.getElementById("writeFields").value || "{}");
+      const data = await post("/api/write", { key, fields });
+      document.getElementById("writeResult").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function listVersions() {
+      const data = await (await fetch("/api/versions")).json();
+      document.getElementById("versions").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function expandShards() {
+      const shards = parseInt(document.getElementById("shards").value, 10);
+      const data = await post("/api/expand", { shards });
+      document.getElementById("expandResult").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function syncCheck() {
+      const data = await post("/api/sync-check", {});
+      document.getElementById("opsResult").textContent = "sync: " + JSON.stringify(data, null, 2);
+    }
+
+    async function ttlScan() {
+      const data = await post("/api/ttl-scan", {});
+      document.getElementById("opsResult").textContent = "ttl: " + JSON.stringify(data, null, 2);
+    }
+
+    health();
+  </script>
+</body>
+</html>

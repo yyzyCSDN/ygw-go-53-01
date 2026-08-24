@@ -28,7 +28,11 @@ func NewBackfill(s *store.Store) *Backfill {
 	return &Backfill{store: s, tasks: map[string]*model.Task{}}
 }
 
-// Run executes a backfill batch for a task and returns the written count.
+// Run executes a backfill batch for a task and returns the written count. A
+// row is written only when its incoming version is not older than the value
+// already stored online; rows whose version trails the online value are
+// skipped so a backfill of historical data cannot clobber a fresher online
+// write. Skipped rows still count toward task progress.
 func (b *Backfill) Run(taskID string, version model.Version, rows []Result) (int, error) {
 	if taskID == "" {
 		return 0, fmt.Errorf("compute: task id must not be empty")
@@ -44,12 +48,15 @@ func (b *Backfill) Run(taskID string, version model.Version, rows []Result) (int
 	written := 0
 	for _, key := range BuildPlan(rows).Order {
 		row := resultFor(rows, key)
-		if err := b.store.Write(row.Entity, row.Fields, version.ID); err != nil {
+		ok, err := b.store.CompareAndWrite(row.Entity, row.Fields, version)
+		if err != nil {
 			task.State = model.TaskPartial
 			return written, err
 		}
-		written++
 		task.Processed++
+		if ok {
+			written++
+		}
 		if task.Completed() {
 			task.State = model.TaskDone
 		}

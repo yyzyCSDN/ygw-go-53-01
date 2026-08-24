@@ -38,26 +38,48 @@ func NewChecker(s *store.Store, versions *version.Manager, step time.Duration) *
 // offline is the callback that returns the offline snapshot of an entity.
 type offline func(key model.EntityKey) *model.Snapshot
 
-// Check splits [begin, until] into contiguous windows bounded by version
-// switch events and reports every difference between the online and offline
-// views inside each window. The tail window after the last switch is always
-// compared; a range remainder is never skipped.
+// Check splits [begin, until] into contiguous windows and reports every
+// difference between the online and offline views inside each window. The
+// fixed step bounds the windows; every version switch event inside the range
+// opens a fresh window so the transition is isolated and the comparison never
+// straddles a switch boundary. The final window is clamped to "until", so a
+// range remainder — including the window that holds a switch — is always
+// compared and never skipped.
 func (c *Checker) Check(begin, until time.Time, offlineView offline) ([]Diff, error) {
 	if !until.After(begin) {
 		return nil, fmt.Errorf("sync: invalid range %v..%v", begin, until)
 	}
-	_ = c.versions.SwitchEvents(begin, until)
 	diffs := make([]Diff, 0)
 	window := 0
-	for start := begin; start.Before(until); start = start.Add(c.step) {
-		end := start.Add(c.step)
-		if end.After(until) {
-			break
+	for _, w := range Partition(begin, until, c.step) {
+		for _, sub := range c.splitAtSwitches(w.Begin, w.End) {
+			diffs = append(diffs, c.compareWindow(sub.Begin, sub.End, window, offlineView)...)
+			window++
 		}
-		diffs = append(diffs, c.compareWindow(start, end, window, offlineView)...)
-		window++
 	}
 	return diffs, nil
+}
+
+// splitAtSwitches subdivides one step window at every version switch event
+// that falls strictly inside (begin, end). The returned windows are contiguous
+// and together cover [begin, end] exactly, so a switch never lands on a seam
+// the comparison would skip over.
+func (c *Checker) splitAtSwitches(begin, end time.Time) []Window {
+	events := c.versions.SwitchEvents(begin, end)
+	bounds := make([]time.Time, 0, len(events)+2)
+	bounds = append(bounds, begin)
+	for _, ev := range events {
+		if ev.At.After(begin) && ev.At.Before(end) {
+			bounds = append(bounds, ev.At)
+		}
+	}
+	bounds = append(bounds, end)
+
+	subs := make([]Window, 0, len(bounds)-1)
+	for i := 0; i+1 < len(bounds); i++ {
+		subs = append(subs, Window{Begin: bounds[i], End: bounds[i+1]})
+	}
+	return subs
 }
 
 // compareWindow compares every entity of the store against the offline view

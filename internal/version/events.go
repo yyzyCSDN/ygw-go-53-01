@@ -15,9 +15,9 @@ type SwitchEvent struct {
 }
 
 // SwitchEvents returns the publish times of every published version inside
-// [since, until), ordered by time, followed by a sentinel boundary at
-// "until" so the caller always knows where the final window ends. The
-// returned boundaries are contiguous by construction.
+// [since, until), ordered by time. The caller treats each event as a window
+// boundary that opens a fresh comparison window so the version transition is
+// isolated from the surrounding step windows.
 func (m *Manager) SwitchEvents(since, until time.Time) []SwitchEvent {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

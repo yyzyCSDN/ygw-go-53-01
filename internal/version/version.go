@@ -50,6 +50,18 @@ func (m *Manager) SetCacheHook(hook CacheHook) {
 	m.hook = hook
 }
 
+// SetClock replaces the time source used to stamp version creation and publish
+// times, so tests can place switch events at deterministic points in the range
+// checked by the consistency checker.
+func (m *Manager) SetClock(now func() time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if now == nil {
+		now = time.Now
+	}
+	m.now = now
+}
+
 // Create drafts a new version for a table.
 func (m *Manager) Create(tableID string) (*model.Version, error) {
 	if _, ok := m.tables.Get(tableID); !ok {

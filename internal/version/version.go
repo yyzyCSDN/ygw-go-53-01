@@ -75,7 +75,9 @@ func (m *Manager) Create(tableID string) (*model.Version, error) {
 }
 
 // Publish moves a draft version to published and switches the active
-// pointer so subsequent online reads resolve the new version.
+// pointer so subsequent online reads resolve the new version. The online
+// read cache is invalidated so no stale snapshot of the prior active
+// version survives the switch.
 func (m *Manager) Publish(id string) (*model.Version, error) {
 	m.mu.Lock()
 	v, ok := m.versions[id]
@@ -88,11 +90,27 @@ func (m *Manager) Publish(id string) (*model.Version, error) {
 		return nil, err
 	}
 	v.PublishedAt = m.now()
+	var priorID string
 	if m.active != nil && m.active.ID != id {
 		_ = Transition(m.active, model.VersionSuperseded)
+		priorID = m.active.ID
 	}
+	m.active = v
 	m.activeID = id
+	hook := m.hook
 	m.mu.Unlock()
+	if hook != nil {
+		// Drop cached reads of the prior active version and of the newly
+		// active one, then flush everything else so reads cannot mix the
+		// old and new version through stale snapshots.
+		if priorID != "" {
+			hook.InvalidateVersion(priorID)
+		}
+		hook.InvalidateVersion(id)
+		if all, ok := hook.(interface{ InvalidateAll() }); ok {
+			all.InvalidateAll()
+		}
+	}
 	return v, nil
 }
 

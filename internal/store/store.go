@@ -52,7 +52,6 @@ type Store struct {
 	mu       sync.RWMutex
 	router   *entity.Router
 	versions *version.Manager
-	cachedActive string
 	shards   []map[model.EntityKey]*Entry
 	cache    *ReadCache
 	journal  *Journal
@@ -171,15 +170,11 @@ func (s *Store) ReadVersion(key model.EntityKey, versionID string) (*model.Snaps
 // manager. The resolution must happen on every read so a freshly published
 // version becomes visible immediately.
 func (s *Store) resolveActiveVersionID() string {
-	if s.cachedActive != "" {
-		return s.cachedActive
-	}
 	active := s.versions.ResolveActive()
 	if active == nil {
 		return ""
 	}
-	s.cachedActive = active.ID
-	return s.cachedActive
+	return active.ID
 }
 
 // entrySnapshot builds a snapshot filtered to the field layout of the given
@@ -364,7 +359,7 @@ func (s *Store) Results() *CommittedResults {
 }
 
 // InvalidateAll drops every cached read; called by the version manager after
-// a rollback so no stale value survives the transition.
+// a publish or rollback so no stale value survives the transition.
 func (s *Store) InvalidateAll() {
 	s.cache.ClearAll()
 }
